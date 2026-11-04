@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Acceso - Proyecto Frases</title>
+</head>
+<body>
+    <h2>Iniciar Sesión</h2>
+    {% if mensaje %}
+        <p style="color: red;"><strong>{{ mensaje }}</strong></p>
+    {% endif %}
+
+    <form method="POST" action="/">
+        <input type="hidden" name="accion" value="login">
+        <label>Usuario:</label><br>
+        <input type="text" name="usuario" required><br><br>
+        <label>Contraseña:</label><br>
+        <input type="password" name="password" required><br><br>
+        <button type="submit">Entrar</button>
+    </form>
+
+    <hr>
+
+    <h2>Registrarse (Si no tienes cuenta)</h2>
+    <form method="POST" action="/">
+        <input type="hidden" name="accion" value="registro">
+        <label>Nuevo Usuario:</label><br>
+        <input type="text" name="usuario" required><br><br>
+        <label>Contraseña:</label><br>
+        <input type="password" name="password" required><br><br>
+        <label>Confirmar Contraseña:</label><br>
+        <input type="password" name="confirmar_password" required><br><br>
+        <button type="submit">Crear cuenta</button>
+    </form>
+</body>
+</html>

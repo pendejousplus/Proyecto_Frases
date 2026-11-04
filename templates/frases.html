@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mis Frases</title>
+</head>
+<body>
+    <h2>Frases de {{ usuario }}</h2>
+    <a href="/salir"><button type="button">Salir</button></a>
+
+    <h3>Añadir nueva frase</h3>
+    <form method="POST" action="/frases">
+        <input type="text" name="frase" placeholder="Escribe tu frase..." required>
+        <button type="submit">Guardar frase</button>
+    </form>
+
+    <h3>Listado de frases guardadas</h3>
+    <ul>
+        {% for f in frases %}
+            <li>{{ f }}</li>
+        {% else %}
+            <li>Aún no has guardado ninguna frase.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

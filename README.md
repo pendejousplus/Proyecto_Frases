@@ -36,3 +36,18 @@ Se modificó:
 - script.sql
 
 Los tres para añadir una nueva fila que almacenase los hashes en vez de las contraseñas.
+
+## Fase 4
+
+Se utiliza validación de datos por scripts
+
+Se necesita:
+
+- Flask-WTF
+- email-validator
+
+Se modificó:
+- app.py
+- frases.html
+
+Se integró al script el validador de email y el validador de variables. Se cambió el html para que mostrase los requisitos para poder crear una frase.

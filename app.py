@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import psycopg2
 import bcrypt
 from flask import Flask, render_template, request, redirect, url_for, session
+from wtforms import Form, StringField, PasswordField
+from wtforms.validators import InputRequired, Length, Regexp, EqualTo
 
 load_dotenv()
 
@@ -18,63 +20,101 @@ def get_conexion():
         password=os.getenv("DB_PASSWORD")
     )
 
+class FormularioRegistro(Form):
+    usuario = StringField("Usuario", validators=[
+        InputRequired(message="El nombre de usuario es obligatorio"),
+        Length(min=5, max=20, message="El usuario debe tener entre 5 y 20 caracteres"),
+        Regexp(r"^[A-Za-z0-9_]+$", message="El usuario solo puede contener letras, números y guiones bajos")
+    ])
+    password = PasswordField("Contraseña", validators=[
+        InputRequired(message="La contraseña es obligatoria"),
+        Length(min=8, message="La contraseña debe tener al menos 8 caracteres")
+    ])
+    confirmar_password = PasswordField("Confirmar", validators=[
+        InputRequired(message="Debes confirmar la contraseña"),
+        EqualTo("password", message="Las contraseñas no coinciden")
+    ])
+
+class FormularioFrase(Form):
+    frase = StringField("Frase", validators=[
+        InputRequired(message="La frase no puede estar vacía"),
+        Length(min=10, max=100, message="La frase debe tener entre 10 y 100 caracteres")
+    ])
+
 @app.route("/", methods=["GET", "POST"])
 def login():
-    mensaje = ""
+    mensaje_error = ""
+    mensaje_exito = ""
+    login_usuario = ""
+    reg_usuario = ""
+
     if request.method == "POST":
         accion = request.form.get("accion")
-        usuario = request.form.get("usuario")
-        password = request.form.get("password")
-        confirmar_password = request.form.get("confirmar_password")
-
         conexion = get_conexion()
         cursor = conexion.cursor()
 
         if accion == "login":
+            usuario = request.form.get("usuario", "").strip()
+            password = request.form.get("password", "")
+            login_usuario = usuario
+
             cursor.execute(
-                "SELECT user_id, user_name, password_hash FROM usuarios WHERE user_name = %s",
+                "SELECT user_id, user_name, password_hash FROM usuarios WHERE LOWER(user_name) = LOWER(%s)",
                 (usuario,)
             )
             usuario_encontrado = cursor.fetchone()
 
             if usuario_encontrado and usuario_encontrado[2]:
-                hash_guardado_bytes = usuario_encontrado[2].encode("utf-8")
-                password_introducida_bytes = password.encode("utf-8")
+                hash_guardado = usuario_encontrado[2].encode("utf-8")
+                password_bytes = password.encode("utf-8")
 
-                if bcrypt.checkpw(password_introducida_bytes, hash_guardado_bytes):
+                if bcrypt.checkpw(password_bytes, hash_guardado):
                     session["user_id"] = usuario_encontrado[0]
                     session["usuario"] = usuario_encontrado[1]
                     cursor.close()
                     conexion.close()
                     return redirect(url_for("frases"))
                 else:
-                    mensaje = "Usuario o contraseña incorrectos."
+                    mensaje_error = "Usuario o contraseña incorrectos."
             else:
-                mensaje = "Usuario o contraseña incorrectos."
+                mensaje_error = "Usuario o contraseña incorrectos."
 
         elif accion == "registro":
-            if confirmar_password != password:
-                mensaje = "Las contraseñas deben coincidir."
-            else:
-                cursor.execute("SELECT user_id FROM usuarios WHERE user_name = %s", (usuario,))
-                if cursor.fetchone():
-                    mensaje = "Este usuario ya existe, intenta iniciar sesión."
-                else:
-                    password_bytes = password.encode("utf-8")
-                    hash_calculado = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
-                    hash_texto = hash_calculado.decode("utf-8")
+            form = FormularioRegistro(request.form)
+            reg_usuario = request.form.get("usuario", "").strip()
 
+            if not form.validate():
+                mensaje_error = list(form.errors.values())[0][0]
+            else:
+                usuario_valido = form.usuario.data.strip()
+                password_bytes = form.password.data.encode("utf-8")
+                hash_texto = bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
+
+                cursor.execute(
+                    "SELECT user_id FROM usuarios WHERE LOWER(user_name) = LOWER(%s)", 
+                    (usuario_valido,)
+                )
+                if cursor.fetchone():
+                    mensaje_error = "Este nombre de usuario ya está registrado. Intenta iniciar sesión."
+                else:
                     cursor.execute(
                         "INSERT INTO usuarios (user_name, password, password_hash) VALUES (%s, %s, %s)",
-                        (usuario, "", hash_texto)
+                        (usuario_valido, "", hash_texto)
                     )
                     conexion.commit()
-                    mensaje = "Usuario registrado con éxito mediante hash seguro. Ya puedes iniciar sesión."
+                    mensaje_exito = "Usuario registrado con éxito. Ya puedes iniciar sesión arriba."
+                    reg_usuario = "" # Vaciamos el campo tras registrar con éxito
 
         cursor.close()
         conexion.close()
 
-    return render_template("login.html", mensaje=mensaje)
+    return render_template(
+        "login.html", 
+        error=mensaje_error, 
+        exito=mensaje_exito,
+        login_usuario=login_usuario,
+        reg_usuario=reg_usuario
+    )
 
 @app.route("/frases", methods=["GET", "POST"])
 def frases():
@@ -83,21 +123,30 @@ def frases():
 
     usuario_actual = session["usuario"]
     user_id_actual = session["user_id"]
+    error_frase = ""
+    mensaje_exito = ""
+    frase_enviada = ""
     
     conexion = get_conexion()
     cursor = conexion.cursor()
 
     if request.method == "POST":
-        nueva_frase = request.form.get("frase")
-        if nueva_frase:
+        form_frase = FormularioFrase(request.form)
+        frase_enviada = request.form.get("frase", "").strip()
+
+        if not form_frase.validate():
+            error_frase = list(form_frase.errors.values())[0][0]
+        else:
             cursor.execute(
                 "INSERT INTO frases (frase, user_id) VALUES (%s, %s)",
-                (nueva_frase, user_id_actual)
+                (form_frase.frase.data.strip(), user_id_actual)
             )
             conexion.commit()
+            mensaje_exito = "¡La frase se ha guardado correctamente en la base de datos!"
+            frase_enviada = ""
 
     mis_frases = []
-    if usuario_actual == "admin":
+    if usuario_actual.strip().lower() == "admin":
         cursor.execute("""
             SELECT f.frase, u.user_name 
             FROM frases f
@@ -116,7 +165,15 @@ def frases():
 
     cursor.close()
     conexion.close()
-    return render_template("frases.html", usuario=usuario_actual, frases=mis_frases)
+
+    return render_template(
+        "frases.html", 
+        usuario=usuario_actual, 
+        frases=mis_frases, 
+        error=error_frase, 
+        exito=mensaje_exito,
+        frase_previa=frase_enviada
+    )
 
 @app.route("/salir")
 def salir():

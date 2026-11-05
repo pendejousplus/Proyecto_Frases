@@ -3,23 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <title>Mis Frases</title>
+    <style>
+        .alerta-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .alerta-exito {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .guia-requisitos {
+            background-color: #e2e3e5;
+            color: #383d41;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+    </style>
 </head>
 <body>
-    <h2>Frases de {{ usuario }}</h2>
-    <a href="/salir"><button type="button">Salir</button></a>
+    <h2>Panel de frases - Usuario: {{ usuario }}</h2>
+    <a href="/salir"><button type="button">Cerrar Sesión</button></a>
+
+    <hr>
+
+    {% if error %}
+        <div class="alerta-error">
+            <strong>No se pudo guardar:</strong> {{ error }}
+        </div>
+    {% endif %}
+
+    {% if exito %}
+        <div class="alerta-exito">
+            <strong>Operación correcta:</strong> {{ exito }}
+        </div>
+    {% endif %}
 
     <h3>Añadir nueva frase</h3>
+    
+    <div class="guia-requisitos">
+        <strong>Requisitos de la frase:</strong> Debe tener entre <strong>10 y 100 caracteres</strong> obligatoriamente.
+    </div>
+
     <form method="POST" action="/frases">
-        <input type="text" name="frase" placeholder="Escribe tu frase..." required>
-        <button type="submit">Guardar frase</button>
+        <input 
+            type="text" 
+            name="frase" 
+            placeholder="Escribe aquí tu frase (mínimo 10 caracteres)..." 
+            value="{{ frase_previa }}"
+            minlength="10" 
+            maxlength="100" 
+            style="width: 380px; padding: 6px;" 
+            required
+        >
+        <button type="submit" style="padding: 6px 12px;">Guardar frase</button>
     </form>
 
+    <hr>
     <h3>Listado de frases guardadas</h3>
     <ul>
         {% for f in frases %}
             <li>{{ f }}</li>
         {% else %}
-            <li>Aún no has guardado ninguna frase.</li>
+            <li>No hay frases guardadas en la base de datos todavía.</li>
         {% endfor %}
     </ul>
 </body>

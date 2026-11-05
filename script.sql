@@ -1,10 +1,11 @@
-CREATE TABLE usuarios (
-    usuario VARCHAR(50) PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS usuarios (
+    user_id SERIAL PRIMARY KEY,
+    user_name VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
 );
 
-CREATE TABLE frases (
-    id SERIAL PRIMARY KEY,
-    frase VARCHAR(255) NOT NULL,
-    usuario VARCHAR(50) REFERENCES usuarios(usuario)
+CREATE TABLE IF NOT EXISTS frases (
+    frase_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES usuarios(user_id) ON DELETE CASCADE,
+    frase VARCHAR(255) NOT NULL
 );

@@ -1,4 +1,6 @@
 import os
+import time
+from datetime import datetime
 from dotenv import load_dotenv
 import psycopg2
 import bcrypt
@@ -21,23 +23,23 @@ def get_conexion():
     )
 
 class FormularioRegistro(Form):
-    usuario = StringField("Usuario", validators=[
-        InputRequired(message="El nombre de usuario es obligatorio"),
-        Length(min=5, max=20, message="El usuario debe tener entre 5 y 20 caracteres"),
-        Regexp(r"^[A-Za-z0-9_]+$", message="El usuario solo puede contener letras, números y guiones bajos")
+    usuario = StringField("Nombre de usuario", validators=[
+        InputRequired(message="El usuario es obligatorio"),
+        Length(min=5, max=20, message="Debe tener entre 5 y 20 caracteres"),
+        Regexp(r"^[A-Za-z0-9]{5,20}$", message="Solo se permiten números y letras")
     ])
     password = PasswordField("Contraseña", validators=[
         InputRequired(message="La contraseña es obligatoria"),
-        Length(min=8, message="La contraseña debe tener al menos 8 caracteres")
+        Length(min=8, message="Debe tener al menos 8 caracteres")
     ])
-    confirmar_password = PasswordField("Confirmar", validators=[
-        InputRequired(message="Debes confirmar la contraseña"),
+    confirmar_password = PasswordField("Confirmar contraseña", validators=[
+        InputRequired(message="Debe confirmar la contraseña"),
         EqualTo("password", message="Las contraseñas no coinciden")
     ])
 
 class FormularioFrase(Form):
     frase = StringField("Frase", validators=[
-        InputRequired(message="La frase no puede estar vacía"),
+        InputRequired(message="La frase es obligatoria"),
         Length(min=10, max=100, message="La frase debe tener entre 10 y 100 caracteres")
     ])
 
@@ -47,6 +49,9 @@ def login():
     mensaje_exito = ""
     login_usuario = ""
     reg_usuario = ""
+
+    if request.args.get("expirado") == "1":
+        mensaje_error = "La sesión ha caducado por superar el tiempo de inactividad."
 
     if request.method == "POST":
         accion = request.form.get("accion")
@@ -71,6 +76,16 @@ def login():
                 if bcrypt.checkpw(password_bytes, hash_guardado):
                     session["user_id"] = usuario_encontrado[0]
                     session["usuario"] = usuario_encontrado[1]
+                    session["ultimo_acceso"] = time.time()
+                    session["tiempo_sesion"] = int(os.getenv("TIEMPO_SESION", 60))
+
+                    cursor.execute(
+                        "INSERT INTO accesos (user_id, fecha_inicio) VALUES (%s, %s) RETURNING acceso_id",
+                        (usuario_encontrado[0], datetime.now())
+                    )
+                    session["acceso_id"] = cursor.fetchone()[0]
+                    conexion.commit()
+
                     cursor.close()
                     conexion.close()
                     return redirect(url_for("frases"))
@@ -91,26 +106,26 @@ def login():
                 hash_texto = bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
                 cursor.execute(
-                    "SELECT user_id FROM usuarios WHERE LOWER(user_name) = LOWER(%s)", 
+                    "SELECT user_id FROM usuarios WHERE LOWER(user_name) = LOWER(%s)",
                     (usuario_valido,)
                 )
                 if cursor.fetchone():
-                    mensaje_error = "Este nombre de usuario ya está registrado. Intenta iniciar sesión."
+                    mensaje_error = "Este usuario ya existe, intenta iniciar sesión."
                 else:
                     cursor.execute(
                         "INSERT INTO usuarios (user_name, password, password_hash) VALUES (%s, %s, %s)",
                         (usuario_valido, "", hash_texto)
                     )
                     conexion.commit()
-                    mensaje_exito = "Usuario registrado con éxito. Ya puedes iniciar sesión arriba."
-                    reg_usuario = "" # Vaciamos el campo tras registrar con éxito
+                    mensaje_exito = "Usuario registrado correctamente. Ya puedes iniciar sesión."
+                    reg_usuario = ""
 
         cursor.close()
         conexion.close()
 
     return render_template(
-        "login.html", 
-        error=mensaje_error, 
+        "login.html",
+        error=mensaje_error,
         exito=mensaje_exito,
         login_usuario=login_usuario,
         reg_usuario=reg_usuario
@@ -121,14 +136,32 @@ def frases():
     if "usuario" not in session or "user_id" not in session:
         return redirect(url_for("login"))
 
+    ahora = time.time()
+    ultimo_acceso = session.get("ultimo_acceso", ahora)
+    tiempo_limite = session.get("tiempo_sesion", int(os.getenv("TIEMPO_SESION", 60)))
+
+    conexion = get_conexion()
+    cursor = conexion.cursor()
+
+    if ahora - ultimo_acceso > tiempo_limite:
+        acceso_id = session.get("acceso_id")
+        if acceso_id:
+            cursor.execute(
+                "UPDATE accesos SET fecha_fin = %s, tipo_fin = %s WHERE acceso_id = %s",
+                (datetime.now(), "inactividad", acceso_id)
+            )
+            conexion.commit()
+        cursor.close()
+        conexion.close()
+        session.clear()
+        return redirect(url_for("login", expirado="1"))
+
+    session["ultimo_acceso"] = ahora
     usuario_actual = session["usuario"]
     user_id_actual = session["user_id"]
     error_frase = ""
     mensaje_exito = ""
     frase_enviada = ""
-    
-    conexion = get_conexion()
-    cursor = conexion.cursor()
 
     if request.method == "POST":
         form_frase = FormularioFrase(request.form)
@@ -142,11 +175,14 @@ def frases():
                 (form_frase.frase.data.strip(), user_id_actual)
             )
             conexion.commit()
-            mensaje_exito = "¡La frase se ha guardado correctamente en la base de datos!"
+            mensaje_exito = "Frase guardada correctamente."
             frase_enviada = ""
 
     mis_frases = []
-    if usuario_actual.strip().lower() == "admin":
+    lista_accesos = []
+    es_admin = (usuario_actual.strip().lower() == "admin")
+
+    if es_admin:
         cursor.execute("""
             SELECT f.frase, u.user_name 
             FROM frases f
@@ -155,6 +191,14 @@ def frases():
         """)
         for fila in cursor.fetchall():
             mis_frases.append(f"{fila[0]} (escrito por: {fila[1]})")
+
+        cursor.execute("""
+            SELECT u.user_name, a.fecha_inicio, a.fecha_fin, a.tipo_fin
+            FROM accesos a
+            INNER JOIN usuarios u ON a.user_id = u.user_id
+            ORDER BY a.acceso_id DESC;
+        """)
+        lista_accesos = cursor.fetchall()
     else:
         cursor.execute(
             "SELECT frase FROM frases WHERE user_id = %s ORDER BY frase_id DESC",
@@ -167,16 +211,30 @@ def frases():
     conexion.close()
 
     return render_template(
-        "frases.html", 
-        usuario=usuario_actual, 
-        frases=mis_frases, 
-        error=error_frase, 
+        "frases.html",
+        usuario=usuario_actual,
+        es_admin=es_admin,
+        frases=mis_frases,
+        accesos=lista_accesos,
+        error=error_frase,
         exito=mensaje_exito,
         frase_previa=frase_enviada
     )
 
 @app.route("/salir")
 def salir():
+    acceso_id = session.get("acceso_id")
+    if acceso_id:
+        conexion = get_conexion()
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE accesos SET fecha_fin = %s, tipo_fin = %s WHERE acceso_id = %s",
+            (datetime.now(), "voluntaria", acceso_id)
+        )
+        conexion.commit()
+        cursor.close()
+        conexion.close()
+
     session.clear()
     return redirect(url_for("login"))
 

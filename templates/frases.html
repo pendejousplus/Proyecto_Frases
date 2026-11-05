@@ -2,32 +2,14 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Mis Frases</title>
+    <title>Panel de Frases</title>
     <style>
-        .alerta-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        .alerta-exito {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        .guia-requisitos {
-            background-color: #e2e3e5;
-            color: #383d41;
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
+        .alerta-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+        .alerta-exito { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+        .guia-requisitos { background-color: #e2e3e5; color: #383d41; padding: 8px; border-radius: 4px; font-size: 0.9em; margin-bottom: 10px; }
+        table { border-collapse: collapse; width: 100%; max-width: 700px; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
     </style>
 </head>
 <body>
@@ -37,45 +19,61 @@
     <hr>
 
     {% if error %}
-        <div class="alerta-error">
-            <strong>No se pudo guardar:</strong> {{ error }}
-        </div>
+        <div class="alerta-error"><strong>No se pudo guardar:</strong> {{ error }}</div>
     {% endif %}
 
     {% if exito %}
-        <div class="alerta-exito">
-            <strong>Operación correcta:</strong> {{ exito }}
-        </div>
+        <div class="alerta-exito"><strong>Operación correcta:</strong> {{ exito }}</div>
     {% endif %}
 
     <h3>Añadir nueva frase</h3>
-    
     <div class="guia-requisitos">
-        <strong>Requisitos de la frase:</strong> Debe tener entre <strong>10 y 100 caracteres</strong> obligatoriamente.
+        <strong>Requisitos de la frase:</strong> Debe tener entre 10 y 100 caracteres.
     </div>
 
     <form method="POST" action="/frases">
-        <input 
-            type="text" 
-            name="frase" 
-            placeholder="Escribe aquí tu frase (mínimo 10 caracteres)..." 
-            value="{{ frase_previa }}"
-            minlength="10" 
-            maxlength="100" 
-            style="width: 380px; padding: 6px;" 
-            required
-        >
+        <input type="text" name="frase" placeholder="Escribe entre 10 y 100 caracteres..." value="{{ frase_previa }}" style="width: 380px; padding: 6px;" required>
         <button type="submit" style="padding: 6px 12px;">Guardar frase</button>
     </form>
 
     <hr>
-    <h3>Listado de frases guardadas</h3>
+
+    <h3>Listado de frases</h3>
     <ul>
         {% for f in frases %}
             <li>{{ f }}</li>
         {% else %}
-            <li>No hay frases guardadas en la base de datos todavía.</li>
+            <li>No hay frases guardadas todavía.</li>
         {% endfor %}
     </ul>
+
+    {% if es_admin %}
+        <hr>
+        <h3>Historial de Accesos de Usuarios (Auditoría Admin)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Inicio de Sesión</th>
+                    <th>Fin de Sesión</th>
+                    <th>Motivo de Fin</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in accesos %}
+                <tr>
+                    <td>{{ a[0] }}</td>
+                    <td>{{ a[1].strftime('%Y-%m-%d %H:%M:%S') if a[1] else '' }}</td>
+                    <td>{{ a[2].strftime('%Y-%m-%d %H:%M:%S') if a[2] else 'En curso' }}</td>
+                    <td>{{ a[3] or 'Activa' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">No hay registros de acceso todavía.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
 </body>
 </html>

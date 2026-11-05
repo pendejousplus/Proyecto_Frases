@@ -1,14 +1,13 @@
 import os
 from dotenv import load_dotenv
 import psycopg2
+import bcrypt
 from flask import Flask, render_template, request, redirect, url_for, session
-
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave_secreta_daw_2026")
-
 
 def get_conexion():
     return psycopg2.connect(
@@ -31,20 +30,25 @@ def login():
         conexion = get_conexion()
         cursor = conexion.cursor()
 
-
         if accion == "login":
             cursor.execute(
-                "SELECT user_id, user_name FROM usuarios WHERE user_name = %s AND password = %s",
-                (usuario, password)
+                "SELECT user_id, user_name, password_hash FROM usuarios WHERE user_name = %s",
+                (usuario,)
             )
             usuario_encontrado = cursor.fetchone()
 
-            if usuario_encontrado:
-                session["user_id"] = usuario_encontrado[0]
-                session["usuario"] = usuario_encontrado[1]
-                cursor.close()
-                conexion.close()
-                return redirect(url_for("frases"))
+            if usuario_encontrado and usuario_encontrado[2]:
+                hash_guardado_bytes = usuario_encontrado[2].encode("utf-8")
+                password_introducida_bytes = password.encode("utf-8")
+
+                if bcrypt.checkpw(password_introducida_bytes, hash_guardado_bytes):
+                    session["user_id"] = usuario_encontrado[0]
+                    session["usuario"] = usuario_encontrado[1]
+                    cursor.close()
+                    conexion.close()
+                    return redirect(url_for("frases"))
+                else:
+                    mensaje = "Usuario o contraseña incorrectos."
             else:
                 mensaje = "Usuario o contraseña incorrectos."
 
@@ -56,12 +60,16 @@ def login():
                 if cursor.fetchone():
                     mensaje = "Este usuario ya existe, intenta iniciar sesión."
                 else:
+                    password_bytes = password.encode("utf-8")
+                    hash_calculado = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+                    hash_texto = hash_calculado.decode("utf-8")
+
                     cursor.execute(
-                        "INSERT INTO usuarios (user_name, password) VALUES (%s, %s)",
-                        (usuario, password)
+                        "INSERT INTO usuarios (user_name, password, password_hash) VALUES (%s, %s, %s)",
+                        (usuario, "", hash_texto)
                     )
                     conexion.commit()
-                    mensaje = "Usuario registrado con éxito. Ya puedes iniciar sesión."
+                    mensaje = "Usuario registrado con éxito mediante hash seguro. Ya puedes iniciar sesión."
 
         cursor.close()
         conexion.close()
